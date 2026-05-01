@@ -1,4 +1,11 @@
-# Geode Mod Comments Server
+# Geode Mod Comments
+
+Mod for Geometry Dash that adds comments in mod popups of Geode Loader. <br>[Watch on GitHub](https://github.com/lil2kki/Geode-Mod-Comments)
+
+### [Download browser extension](https://github.com/lil2kki/Geode-Mod-Comments/releases/download/nightly/geode-comments-extension.crx)
+Lets you to see comments dirctly on [geode-sdk.org](https://geode-sdk.org)!
+
+# Server
 
 A server for the [Mod Comments](https://github.com/user95401/Geode-Mod-Comments) Geode modification, providing ability to comment the Geometry Dash mods.
 
@@ -120,3 +127,7 @@ data/
 ## Dependencies
 
 - [Argon Server](https://argon.globed.dev)
+
+
+---
+[admin panel](https://geode-comments.bccst.ru/admin.php)
