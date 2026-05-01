@@ -17,15 +17,16 @@ inline static auto ARGON_TOKEN = std::string();
 
 class CommentsLayer : public CCLayer {
 public:
-    EventListener<web::WebTask> m_webTaskListener;
+    async::TaskHolder<web::WebResponse> m_webListener;
+    async::TaskHolder<Result<std::string>> m_argonListener;
     std::string m_id;
     CCNode* m_textArea;
-    virtual void keyDown(enumKeyCodes key) override {
-        CCLayer::keyDown(key);
+    virtual void keyDown(enumKeyCodes key, double a) override {
+        CCLayer::keyDown(key, a);
         
         if (key == KEY_Enter) {
             auto button = typeinfo_cast<CCMenuItem*>(
-                this->getChildByIDRecursive(
+                this->querySelector(
                     CCDirector::get()->getKeyboardDispatcher()->getShiftKeyPressed()
                     ? "inpExt"_spr : "sendButton"_spr
                 )
@@ -113,7 +114,7 @@ public:
             textArea->getScrollLayer()->m_cutContent = false;
             textArea->getScrollLayer()->m_disableMovement = true;
             textArea->getScrollLayer()->setMouseEnabled(false);
-            textArea->getChildByType<CCScale9Sprite>(0)->setVisible(false);
+            textArea->getChildByType<NineSlice>(0)->setVisible(false);
             container->addChildAtPosition(textArea, Anchor::BottomLeft, { 5.f, -2.000f });
             container->setContentHeight(container->getContentHeight() + textArea->getContentHeight());
             
@@ -143,7 +144,6 @@ public:
             auto deleteBtn = CCMenuItemExt::createSpriteExtra(
                 deleteBtnLabel,
                 [__this = Ref(this), container = Ref(container)](CCMenuItem* btn) {
-                    
                     //hold shift to fast delete
                     if (not CCDirector::get()->getKeyboardDispatcher()->getShiftKeyPressed()) {
                         auto confirmed = btn->getUserObject("confirmed"_spr);
@@ -159,30 +159,7 @@ public:
                             }
                         );
                     };
-                    
-                    web::WebRequest req = web::WebRequest();
-                    req.header("Content-Type", "multipart/form-data");
-                    
-                    __this->m_webTaskListener.bind(
-                        [__this, container](web::WebTask::Event* e) {
-                            if (!__this) return e->cancel();
-                            if (web::WebResponse* res = e->getValue()) {
-                                auto parsed = res->string().unwrapOrDefault();
-                                if (string::contains(parsed, "Deleted")) {
-                                    __this->loadComments();
-                                }
-                                else createQuickPopup(
-                                    "Smth went wrong...",
-                                    fmt::format(
-                                        "Your comment wasn't deleted.\n<cr>{} [code: {}]</c>",
-                                        parsed, res->code()
-                                    ),
-                                    "OK", nullptr, nullptr
-                                );
-                            }
-                        }
-                    );
-                    
+                    web::WebRequest req = web::WebRequest().header("Content-Type", "multipart/form-data");
                     req.bodyMultipart(web::MultipartForm()
                         .param("delete", __this->getID())
                         .param("comment_id", container->getTag())
@@ -191,8 +168,24 @@ public:
                         .param("username", argon::getGameAccountData().username)
                         .param("token", ARGON_TOKEN)
                     );
-                    __this->m_webTaskListener.setFilter(req.post(API + std::string("?delete")));
-                    
+                    __this->m_webListener.spawn(
+                        req.post(API + std::string("?delete")), [__this, container](web::WebResponse res) {
+                            if (__this) {
+                                auto parsed = res.string().unwrapOrDefault();
+                                if (string::contains(parsed, "Deleted")) {
+                                    __this->loadComments();
+                                }
+                                else createQuickPopup(
+                                    "Smth went wrong...",
+                                    fmt::format(
+                                        "Your comment wasn't deleted.\n<cr>{} [code: {}]</c>",
+                                        parsed, res.code()
+                                    ),
+                                    "OK", nullptr, nullptr
+                                );
+                            }
+                        }
+                    );
                 }
             );
             deleteBtn->setID("delete-comment"_spr);
@@ -259,24 +252,18 @@ public:
         if (commentsScroll->m_disableMovement) commentsScroll->scrollToTop();
     }
     void loadComments() {
-        
         web::WebRequest req = web::WebRequest();
         req.header("Content-Type", "application/json");
-        
-        m_webTaskListener.bind(
-            [__this = Ref(this)](web::WebTask::Event* e) {
-                if (!__this) return e->cancel();
-                if (web::WebResponse* res = e->getValue()) {
-                    auto parsed = res->json();
+        req.param("get", this->getID());
+        m_webListener.spawn(
+            req.get(API), [__this = Ref(this)](web::WebResponse res) {
+                if (__this) {
+                    auto parsed = res.json();
                     if (parsed.isOk()) __this->setupComments(parsed.unwrapOrDefault());
                     else log::error("{} err: {}", __FUNCTION__, parsed.err().value_or("unk err..."));
                 }
             }
         );
-        
-        req.param("get", this->getID());
-        m_webTaskListener.setFilter(req.get(API));
-        
     }
     bool auth() {
         
@@ -337,7 +324,8 @@ public:
         auto ARGON_SERVER = getMod()->getSettingValue<std::string>("ARGON_SERVER");
         if (ARGON_SERVER.size() > 3) argon::setServerUrl(ARGON_SERVER).unwrap();
         
-        auto res = argon::startAuth(
+        m_argonListener.spawn(
+            argon::startAuth(),
             [this, parent = Ref(m_textArea), statusLabel = Ref(statusLabel)](Result<std::string> res) {
                 
                 if (!res) {
@@ -350,21 +338,21 @@ public:
                 //log::debug("TOKEN: {}", TOKEN);
                 
                 recreateMe();
-            },
-            [statusLabel = Ref(statusLabel)](argon::AuthProgress progress) {
+            }
+            /*, [statusLabel = Ref(statusLabel)](argon::AuthProgress progress) {
                 if (statusLabel) statusLabel->setString(
                     fmt::format("Auth progress: {}", argon::authProgressToString(progress)).c_str()
                 );
                 log::info("Auth progress: {}", argon::authProgressToString(progress));
-            }
+            }*/
         );
         
-        if (!res) {
+        /*if (!res) {
             if (statusLabel) statusLabel->setString(
                 fmt::format("Failed to start auth attempt: {}", res.unwrapErr()).c_str()
             );
             log::warn("Failed to start auth attempt: {}", res.unwrapErr());
-        }
+        }*/
         
         return true;
     }
@@ -394,9 +382,8 @@ public:
                     loadingSpinner = Ref(loadingSpinner),
                     blackoutRender = Ref(blackoutRender)] {
                         if (__this) {
-                            auto& req = __this->m_webTaskListener.getFilter();
                             if (blackoutRender and loadingSpinner) {
-                                if (!req.isFinished()) {//big deals
+                                if (__this->m_webListener.isPending()) {//big deals
                                     blackoutRender->beginWithClear(0, 0, 0, 0);
                                     
                                     //fucking scissor or wht evr
@@ -417,8 +404,8 @@ public:
                                     //setVisible
                                     for (auto& it : cutContentsMap) it.first->m_cutContent = it.second;
                                 }
-                                loadingSpinner->setVisible(!req.isFinished());
-                                blackoutRender->getSprite()->setVisible(!req.isFinished());
+                                loadingSpinner->setVisible(__this->m_webListener.isPending());
+                                blackoutRender->getSprite()->setVisible(__this->m_webListener.isPending());
                             }
                         }
                     }
@@ -496,29 +483,26 @@ public:
                         web::WebRequest req = web::WebRequest();
                         req.header("Content-Type", "multipart/form-data");
                         
-                        __this->m_webTaskListener.bind(
-                            [__this, input, sender = Ref(sender)](web::WebTask::Event* e) {
-                                if (!__this) return e->cancel();
-                                if (web::WebResponse* res = e->getValue()) {
-                                    auto isEdit = __this->querySelector("edit-markup"_spr);
-                                    auto parsed = res->string().unwrapOrDefault();
-                                    if (string::contains(parsed, isEdit ? "Updated" : "posted")) {
-                                        if (isEdit) isEdit->removeFromParent();
-                                        if (input) input->setString(""); //BEFORE loadComments
-                                        __this->loadComments();
-                                    }
-                                    else FLAlertLayer::create(
-                                        "Something went wrong...",
-                                        fmt::format(
-                                            "Your comment wasn't {}.\n<cr>{} [code: {}]</c>",
-                                            isEdit ? "updated" : "posted",
-                                            parsed, res->code()
-                                        ),
-                                        "OK"
-                                    );
+                        auto asd = [__this, input, sender = Ref(sender)](web::WebResponse res)
+                            {
+                                if (!__this) return;
+                                auto isEdit = __this->querySelector("edit-markup"_spr);
+                                auto parsed = res.string().unwrapOrDefault();
+                                if (string::contains(parsed, isEdit ? "Updated" : "posted")) {
+                                    if (isEdit) isEdit->removeFromParent();
+                                    if (input) input->setString(""); //BEFORE loadComments
+                                    __this->loadComments();
                                 }
-                            }
-                        );
+                                else FLAlertLayer::create(
+                                    "Something went wrong...",
+                                    fmt::format(
+                                        "Your comment wasn't {}.\n<cr>{} [code: {}]</c>",
+                                        isEdit ? "updated" : "posted",
+                                        parsed, res.code()
+                                    ),
+                                    "OK"
+                                );
+                            };
                         
                         if (auto edit = __this->querySelector("edit-markup"_spr)) {
                             req.bodyMultipart(web::MultipartForm()
@@ -530,7 +514,7 @@ public:
                                 .param("username", argon::getGameAccountData().username)
                                 .param("token", ARGON_TOKEN)
                             );
-                            return __this->m_webTaskListener.setFilter(req.post(API + std::string("?update")));
+                            return __this->m_webListener.spawn(req.post(API + std::string("?update")), asd);
                         }
                         
                         req.bodyMultipart(web::MultipartForm()
@@ -541,7 +525,7 @@ public:
                             .param("username", argon::getGameAccountData().username)
                             .param("token", ARGON_TOKEN)
                         );
-                        __this->m_webTaskListener.setFilter(req.post(API + std::string("?post")));
+                        __this->m_webListener.spawn(req.post(API + std::string("?post")), asd);
                         
                     }
                 );
@@ -590,19 +574,16 @@ public:
 };
 
 //here goes mod popup ruinify
-void hi() {
-    new EventListener<EventFilter<ModPopupUIEvent>>(
-        +[](ModPopupUIEvent* event) {
-            
-            //get popup
-            auto popup = typeinfo_cast<FLAlertLayer*>(event->getPopup());
+$on_mod(Loaded) {
+    ModPopupUIEvent().listen(
+        [](FLAlertLayer* popup, std::string_view modIDa, std::optional<Mod*> mod) -> bool {
+
             if (!popup) return ListenerResult::Propagate;
-            
-            auto modID = event->getModID();
-            auto modVersion = event->getMod().has_value() ? event->getMod().value()->getVersion().toNonVString() : "";
-            
+
+			std::string modID(modIDa);
+
             //fix tabs menu
-            CCNode* tabsMenu = popup->getChildByIDRecursive("tabs-menu");
+            CCNode* tabsMenu = popup->querySelector("tabs-menu");
             if (tabsMenu) {
                 if (!tabsMenu->getUserObject("pointAndSizeFixMark"_spr)) {
                     tabsMenu->setUserObject("pointAndSizeFixMark"_spr, tabsMenu);
@@ -612,32 +593,32 @@ void hi() {
                 };
             }
             else return ListenerResult::Propagate;
-            
+
             //rcontainer
             auto rcontainer = tabsMenu->getParent();
-            
+
             //get tab btns
             CCMenuItemSpriteExtra* description = typeinfo_cast<CCMenuItemSpriteExtra*>
                 (tabsMenu->getChildByID("description"));
             if (!description) return ListenerResult::Propagate;
             auto description_sprite = typeinfo_cast<GeodeTabSprite*>(description->getNormalImage());
-            
+
             CCMenuItemSpriteExtra* changelog = typeinfo_cast<CCMenuItemSpriteExtra*>
                 (tabsMenu->getChildByID("changelog"));
             if (!changelog) return ListenerResult::Propagate;
             auto changelog_sprite = typeinfo_cast<GeodeTabSprite*>(changelog->getNormalImage());
-            
+
             auto myTabID = tabsMenu->getChildrenCount();
-            
+
             if (!tabsMenu->getChildByID("comments")) {
                 auto tabspr = GeodeTabSprite::create("chat.png"_spr, "Comments", 140.f);
                 tabspr->select(0);
-                
+
                 auto old_sel = description->m_pfnSelector;
                 auto old_lis = description->m_pListener;
                 auto onTab = [modID, old_lis, old_sel, myTabID, popup, rcontainer, description_sprite, changelog_sprite, tabspr]
                 (CCMenuItemSpriteExtra* sender) {
-                    auto textarea = rcontainer->getChildByIDRecursive("textarea");
+                    auto textarea = rcontainer->querySelector("textarea");
                     if (!textarea) return;
                     auto pFetchTextArea = textarea->getParent();
                     if (!pFetchTextArea) return;
@@ -661,25 +642,24 @@ void hi() {
                         //hide descr or changelog
                         textarea->setVisible(0);
                         //add comments layer really
-                        auto comments = CommentsLayer::create(modID, pFetchTextArea);
+                        auto comments = CommentsLayer::create(modID.data(), pFetchTextArea);
                         pFetchTextArea->addChild(comments);
                     }
                     sender->getParent()->setTag(sender->getTag());
-                };
-                
+                    };
+
                 CCMenuItemExt::assignCallback<CCMenuItemSpriteExtra>(description, onTab);
                 CCMenuItemExt::assignCallback<CCMenuItemSpriteExtra>(changelog, onTab);
-                
+
                 auto item = CCMenuItemExt::createSpriteExtra(tabspr, onTab);
                 item->m_pListener = description->m_pListener;
                 item->setID("comments");
                 tabsMenu->addChild(item, 0, myTabID);
             };
-            
+
             tabsMenu->updateLayout();
-            
+
             return ListenerResult::Propagate;
         }
-    );
-}
-$execute{ hi(); } //intellisense goes insane in $execute block
+    ).leak();
+};

@@ -3,7 +3,7 @@
 using namespace geode::prelude;
 
 //ediror with cool name. requries the TextInput .-.
-class StupidAsfMultilineMDTextEditor : public Popup<TextInput*>, TextInputDelegate
+class StupidAsfMultilineMDTextEditor : public Popup, TextInputDelegate
 {
 public:
     bool m_shouldUpdateStrings = false;
@@ -73,8 +73,8 @@ public:
     virtual void textChanged(CCTextInputNode* p0) override {
         this->m_shouldUpdateStrings = true;
     };
-    virtual void keyDown(enumKeyCodes key) override {
-        Popup::keyDown(key);
+    virtual void keyDown(enumKeyCodes key, double a) override {
+        Popup::keyDown(key, a);
         //log::debug("{}", CCKeyboardDispatcher::get()->keyToString(key));
 
         if (key == KEY_Enter) {
@@ -112,9 +112,12 @@ public:
         Popup::onClose(sender);
     }
 
-    bool setup(TextInput*) override {
+    bool init() {
+        if (!Popup::init(440.000f, 280.000f)) return false;
 
-        this->m_bgSprite->initWithFile("GJ_square05.png");
+		this->m_bgSprite->getBatchNode()->setTexture(CCTextureCache::sharedTextureCache()->addImage(
+            "GJ_square05.png", 0
+        ));
         this->m_mainLayer->updateLayout();
 
         auto container = CCLayer::create();
@@ -218,10 +221,10 @@ public:
                 md->setAnchorPoint(CCPointMake(0.f, 0.f));
                 mdprevContainer->addChild(md);
 
-                auto mdBG = md->getChildByType<CCScale9Sprite>(0);
-                auto oldBGsize = mdBG->getContentSize();
-                mdBG->initWithFile("game_bg_13_001.png");
-                mdBG->setContentSize(oldBGsize);
+                auto mdBG = md->getChildByType<NineSlice>(0);
+                mdBG->getBatchNode()->setTexture(CCTextureCache::sharedTextureCache()->addImage(
+                    "game_bg_13_001.png", 0
+                ));
                 mdBG->setColor(ccBLACK);
             }
 
@@ -252,7 +255,7 @@ public:
     static StupidAsfMultilineMDTextEditor* create(TextInput* text) {
         auto ret = new StupidAsfMultilineMDTextEditor();
         ret->m_pTextInput = text; //huh
-        if (ret->initAnchored(440.000f, 280.000f, text)) {
+        if (ret->init()) {
             ret->autorelease();
             return ret;
         }
