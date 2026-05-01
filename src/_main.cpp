@@ -208,7 +208,7 @@ public:
                     input->setString(comment["body"].asString().unwrapOrDefault());
                     if (string::contains(input->getString(), "\n")) {
                         input->getInputNode()->getTextLabel()->setString(
-                            ("* " + matjson::Value(input->getString()).dump()).c_str()
+                            ("* " + matjson::Value(input->getString().c_str()).dump()).c_str()
                             //make prev label in tar input a bit smaller
                             //f.e its replaces newlines to \n
                         );
