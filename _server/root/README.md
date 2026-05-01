@@ -1,11 +1,4 @@
-# Geode Mod Comments
-
-Mod for Geometry Dash that adds comments in mod popups of Geode Loader. <br>[Watch on GitHub](https://github.com/lil2kki/Geode-Mod-Comments)
-
-### [Download browser extension](https://github.com/lil2kki/Geode-Mod-Comments/releases/download/nightly/geode-comments-extension.crx)
-Lets you to see comments dirctly on [geode-sdk.org](https://geode-sdk.org)!
-
-# Server
+# Geode Mod Comments Server
 
 A server for the [Mod Comments](https://github.com/user95401/Geode-Mod-Comments) Geode modification, providing ability to comment the Geometry Dash mods.
 
