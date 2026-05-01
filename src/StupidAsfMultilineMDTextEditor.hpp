@@ -43,7 +43,7 @@ public:
         auto newStr = std::string();
 
         for (auto line : getLineInputs()) {
-            newStr += line->getString() + "\n";
+            newStr += std::string(line->getString().c_str()) + "\n";
         }
 
         if (!newStr.empty()) while (newStr.back() == '\n') newStr.pop_back();
@@ -87,8 +87,8 @@ public:
             nextLine->focus();
 
             auto uCursorPos = line->getInputNode()->m_textField->m_uCursorPos;
-            auto currentStr = line->getString();
-            auto nextStr = nextLine->getString();
+            std::string currentStr = line->getString().c_str();
+            std::string nextStr = nextLine->getString().c_str();
 
             if (currentStr.empty() || uCursorPos == 0 || uCursorPos > currentStr.length()) void();
             else {
@@ -136,7 +136,7 @@ public:
                 linesContainer->setID("linesContainer"_spr);
                 container->addChild(linesContainer);
 
-                auto inpStrLines = string::split(m_pTextInput->getString(), "\n");
+                auto inpStrLines = string::split(m_pTextInput->getString().c_str(), "\n");
 
                 auto inputheight = 10.f;
                 for (int i = 0; i <= 27; i++) {

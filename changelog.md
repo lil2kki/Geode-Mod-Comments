@@ -1,3 +1,6 @@
+## v2.0.0-beta.7 (rc)
+- Android support.
+
 ## v2.0.0-beta.6
 - Migrate to Geode SDK v5
 
